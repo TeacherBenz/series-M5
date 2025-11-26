@@ -1,9 +1,18 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Difficulty, MissionId, MathProblem } from "../types";
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// Access API Key safely. Vite config injects this as a string replacement.
+const getApiKey = () => {
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  return '';
+};
+
+const apiKey = getApiKey();
+// Only initialize if we have a key, otherwise we'll handle it in the function calls
+// Using a dummy key string if empty allows the constructor to pass, but calls will fail gracefully later
+const ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
 
 // Helper to get Thai topic name
 const getTopicName = (id: MissionId): string => {
@@ -17,6 +26,12 @@ const getTopicName = (id: MissionId): string => {
 };
 
 export const generateProblem = async (missionId: MissionId, difficulty: Difficulty): Promise<MathProblem> => {
+  // Fallback immediately if no API key is detected to prevent 400 errors from bubbling up awkwardly
+  if (!apiKey || apiKey === 'dummy-key') {
+     console.warn("API Key is missing. Using offline fallback.");
+     return getFallbackProblem(missionId);
+  }
+
   const topic = getTopicName(missionId);
   const model = "gemini-2.5-flash";
 
@@ -65,29 +80,15 @@ export const generateProblem = async (missionId: MissionId, difficulty: Difficul
   } catch (error) {
     console.error("Gemini Generation Error:", error);
     // Fallback problem in case of API failure or rate limit
-    return {
-      question: "จงหาผลบวก 10 พจน์แรกของลำดับ 2, 4, 6, ... (ระบบขัดข้อง โปรดลองใหม่)",
-      sequenceData: "2, 4, 6, ...",
-      correctAnswer: 110,
-      hint: "ใช้สูตร Sn = n/2 * (2a1 + (n-1)d)",
-      explanationSteps: [
-        "จากโจทย์ ลำดับคือ 2, 4, 6, ...",
-        "จะได้พจน์แรก a1 = 2",
-        "ผลต่างร่วม d = 4 - 2 = 2",
-        "ต้องการหาผลบวก 10 พจน์แรก (S10)",
-        "จากสูตร Sn = n/2 * (2a1 + (n-1)d)",
-        "แทนค่าลงในสูตร: S10 = 10/2 * (2(2) + (10-1)(2))",
-        "S10 = 5 * (4 + 9(2))",
-        "S10 = 5 * (4 + 18)",
-        "S10 = 5 * 22",
-        "S10 = 110"
-      ],
-      variableUnit: "หน่วย"
-    };
+    return getFallbackProblem(missionId);
   }
 };
 
 export const askTutor = async (question: string, context: string): Promise<string> => {
+  if (!apiKey || apiKey === 'dummy-key') {
+    return "กรุณาตั้งค่า API Key เพื่อใช้งานระบบ AI Tutor (Offline Mode)";
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -102,3 +103,26 @@ export const askTutor = async (question: string, context: string): Promise<strin
     return "เกิดข้อผิดพลาดในการเชื่อมต่อกับครู AI";
   }
 };
+
+// Extracted fallback logic
+const getFallbackProblem = (missionId: MissionId): MathProblem => {
+    return {
+      question: "ระบบ AI กำลังปิดปรับปรุงหรือไม่มี API Key กรุณาลองใหม่ภายหลัง (โจทย์ตัวอย่าง: จงหาผลบวก 10 พจน์แรก)",
+      sequenceData: "2, 4, 6, ...",
+      correctAnswer: 110,
+      hint: "ใช้สูตร Sn = n/2 * (2a1 + (n-1)d)",
+      explanationSteps: [
+        "นี่คือโหมด Offline (เนื่องจากไม่พบ API Key หรือเกิดข้อผิดพลาด)",
+        "จากโจทย์ ลำดับคือ 2, 4, 6, ...",
+        "จะได้พจน์แรก a1 = 2",
+        "ผลต่างร่วม d = 4 - 2 = 2",
+        "ต้องการหาผลบวก 10 พจน์แรก (S10)",
+        "จากสูตร Sn = n/2 * (2a1 + (n-1)d)",
+        "แทนค่าลงในสูตร: S10 = 10/2 * (2(2) + (10-1)(2))",
+        "S10 = 5 * (4 + 9(2))",
+        "S10 = 5 * 22",
+        "S10 = 110"
+      ],
+      variableUnit: "หน่วย"
+    };
+}
