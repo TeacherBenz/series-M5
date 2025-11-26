@@ -72,6 +72,7 @@ export const generateProblem = async (missionId: MissionId, difficulty: Difficul
       }
     });
 
+    
     const jsonText = response.text;
     if (!jsonText) throw new Error("No data returned from AI");
     
